@@ -39,6 +39,8 @@ def ammail_request(base_url, api_key, path, method="GET", data=None):
     req = urllib.request.Request(url, method=method)
     req.add_header("X-API-Key", api_key)
     req.add_header("Content-Type", "application/json")
+    req.add_header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+    req.add_header("Accept", "application/json, */*")
     if data:
         req.data = json.dumps(data).encode()
     with urllib.request.urlopen(req, timeout=15) as resp:
