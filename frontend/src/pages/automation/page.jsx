@@ -84,8 +84,14 @@ function CodeBuddyTab() {
     leonardo: false,
     weavy: false,
     "kimi-coding": false,
+    "cloudflare-ai": false,
     proxy: false,
   });
+  const [cfGlobalApiKey, setCfGlobalApiKey] = useState("");
+  const [cfEmail, setCfEmail] = useState("");
+  const [cfTokenName, setCfTokenName] = useState("");
+  const [cfSetupLoading, setCfSetupLoading] = useState(false);
+  const [cfSetupResult, setCfSetupResult] = useState(null);
 
   const toggleSection = (section) => {
     setOpenSettings((prev) => ({ ...prev, [section]: !prev[section] }));
@@ -732,7 +738,106 @@ function CodeBuddyTab() {
               )}
             </div>
 
-            {/* 4. Outbound Proxy Settings */}
+            {/* 4. Cloudflare Workers AI — Auto Setup */}
+            <div className="space-y-2">
+              {renderSectionHeader("Cloudflare Workers AI", "cloud", openSettings["cloudflare-ai"], () => toggleSection("cloudflare-ai"))}
+              {openSettings["cloudflare-ai"] && (
+                <div className="pl-6 pr-2 py-2 space-y-3">
+                  <p className="text-[11px] text-text-muted leading-relaxed">
+                    Input <strong>Global API Key</strong> + email Cloudflare kamu. Sistem akan otomatis buat API Token Workers AI dan simpan ke provider.
+                  </p>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-text-main">Cloudflare Email</label>
+                    <input
+                      type="email"
+                      placeholder="you@example.com"
+                      value={cfEmail}
+                      onChange={(e) => setCfEmail(e.target.value)}
+                      className="w-full text-xs p-2 rounded-lg border border-border-subtle bg-surface focus:outline-none focus:border-primary text-text-main"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-semibold text-text-main">Global API Key</label>
+                      <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
+                        Dapatkan di sini <span className="material-symbols-outlined text-[10px]">open_in_new</span>
+                      </a>
+                    </div>
+                    <input
+                      type="password"
+                      placeholder="Global API Key (bukan API Token)"
+                      value={cfGlobalApiKey}
+                      onChange={(e) => setCfGlobalApiKey(e.target.value)}
+                      className="w-full text-xs p-2 rounded-lg border border-border-subtle bg-surface focus:outline-none focus:border-primary text-text-main"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-text-main">Nama Token (opsional)</label>
+                    <input
+                      type="text"
+                      placeholder="9router Workers AI"
+                      value={cfTokenName}
+                      onChange={(e) => setCfTokenName(e.target.value)}
+                      className="w-full text-xs p-2 rounded-lg border border-border-subtle bg-surface focus:outline-none focus:border-primary text-text-main"
+                    />
+                  </div>
+                  {cfSetupResult && (
+                    <div className={`p-2.5 rounded-lg text-xs font-medium flex items-start gap-2 ${
+                      cfSetupResult.ok
+                        ? "bg-green-500/10 border border-green-500/20 text-green-400"
+                        : "bg-red-500/10 border border-red-500/20 text-red-400"
+                    }`}>
+                      <span className="material-symbols-outlined text-[16px] shrink-0 mt-0.5">
+                        {cfSetupResult.ok ? "check_circle" : "error"}
+                      </span>
+                      <span className="break-all text-left">{cfSetupResult.message}</span>
+                    </div>
+                  )}
+                  <button
+                    onClick={async () => {
+                      if (!cfEmail || !cfGlobalApiKey) {
+                        setCfSetupResult({ ok: false, message: "Email dan Global API Key wajib diisi." });
+                        return;
+                      }
+                      setCfSetupLoading(true);
+                      setCfSetupResult(null);
+                      try {
+                        const res = await fetch("/api/automation/cloudflare-ai", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            globalApiKey: cfGlobalApiKey,
+                            email: cfEmail,
+                            tokenName: cfTokenName || undefined,
+                          }),
+                        });
+                        const data = await res.json();
+                        if (data.ok) {
+                          setCfSetupResult({ ok: true, message: data.message });
+                          setCfGlobalApiKey("");
+                        } else {
+                          setCfSetupResult({ ok: false, message: data.error || "Setup gagal." });
+                        }
+                      } catch (e) {
+                        setCfSetupResult({ ok: false, message: "Request gagal: " + e.message });
+                      } finally {
+                        setCfSetupLoading(false);
+                      }
+                    }}
+                    disabled={cfSetupLoading}
+                    className={`w-full text-xs py-2 px-4 rounded-lg font-semibold transition-all cursor-pointer ${
+                      cfSetupLoading
+                        ? "bg-surface-2 text-text-muted cursor-wait border border-border-subtle"
+                        : "bg-[#F38020] hover:bg-[#e07318] text-white border border-transparent"
+                    }`}
+                  >
+                    {cfSetupLoading ? "⏳ Setting up..." : "⚡ Auto Setup Workers AI"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 5. Outbound Proxy Settings */}
             <div className="space-y-2">
               {renderSectionHeader("Outbound Proxy Settings", "vpn_lock", openSettings.proxy, () => toggleSection("proxy"))}
               {openSettings.proxy && (

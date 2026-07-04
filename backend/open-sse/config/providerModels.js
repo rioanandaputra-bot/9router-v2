@@ -472,6 +472,7 @@ export const PROVIDER_MODELS = {
     { id: "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b", name: "DeepSeek R1 Distill Qwen 32B" },
     { id: "@cf/moonshotai/kimi-k2.5", name: "Kimi K2.5" },
     { id: "@cf/moonshotai/kimi-k2.6", name: "Kimi K2.6" },
+    { id: "@cf/zai-org/glm-5.2", name: "GLM 5.2 (Agentic Coding)" },
     { id: "@cf/zai-org/glm-4.7-flash", name: "GLM 4.7 Flash" },
     { id: "@cf/qwen/qwq-32b", name: "QwQ 32B" },
     { id: "@cf/qwen/qwen2.5-coder-32b-instruct", name: "Qwen 2.5 Coder 32B Instruct" },
