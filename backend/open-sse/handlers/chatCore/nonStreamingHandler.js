@@ -217,6 +217,9 @@ export async function handleNonStreamingResponse({ providerResponse, provider, m
         contentBlocks.push({ type: "tool_use", id: tc.id, name: tc.function?.name, input });
       }
     }
+    // Claude Code requires at least one text or tool_use block — cannot be only thinking
+    const hasTextOrTool = contentBlocks.some(b => b.type === "text" || b.type === "tool_use");
+    if (!hasTextOrTool) contentBlocks.push({ type: "text", text: "" });
 
     let stopReason = "end_turn";
     const fr = choice?.finish_reason;
