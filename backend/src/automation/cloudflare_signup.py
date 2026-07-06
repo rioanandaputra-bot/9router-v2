@@ -749,7 +749,7 @@ def main():
 
 
         # ── Step 6: Email verification ────────────────────────────────────────
-        if ammail_ok:
+        if ammail_ok and not email_already_registered:
             verify_link = wait_for_cf_verify_email(
                 args.ammail_base_url,
                 args.ammail_api_key,
@@ -766,9 +766,12 @@ def main():
                     log_step(f"Warning navigasi verify link: {e}")
             else:
                 log_step("Email verifikasi tidak diterima dalam 2 menit, lanjut coba login...")
+        elif email_already_registered:
+            log_step("Email sudah terdaftar — skip verifikasi, langsung ke login form")
         else:
             log_step("Ammail tidak dikonfigurasi — skip email verification, lanjut login manual...")
             time.sleep(5)
+
 
         # ── Step 7: Login if needed ───────────────────────────────────────────
         # After verify link, CF might already redirect to dashboard
