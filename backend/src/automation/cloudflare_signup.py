@@ -806,56 +806,70 @@ def main():
                         # Take screenshot to see login page state
                         page.screenshot(path="/tmp/cf_login_page.png")
 
-                        # CF Login Step 0: Solve Turnstile FIRST if visible
-                        # (CF /login shows Turnstile before the email form on some flows)
-                        log_step("Menyelesaikan Turnstile login...")
-                        wait_for_cf_clearance(page, timeout=5)
-                        try_click_turnstile_checkbox(page)
-                        time.sleep(2)
+                        # Screenshot login page state
+                        page.screenshot(path="/tmp/cf_login_state.png")
 
-                        # CF Login Step 1: Fill email (after Turnstile clears)
+                        # Diagnostic: log all inputs on login page
+                        try:
+                            login_inputs = page.evaluate("""
+                                () => Array.from(document.querySelectorAll('input')).map(i => ({
+                                    type: i.type, name: i.name, id: i.id,
+                                    autocomplete: i.autocomplete, placeholder: i.placeholder,
+                                    visible: i.offsetParent !== null
+                                }))
+                            """)
+                            log_step(f"Login page inputs: {login_inputs}")
+                        except Exception as e:
+                            log_step(f"Login inputs diagnostic: {e}")
+
+                        # CF login is ONE-STEP form (email + password on same page)
+                        # Screenshot showed: Email input + Password input + Sign in button
+                        # Use broad selectors to find the email/password fields
+                        log_step("Menyelesaikan Turnstile login (if any)...")
+                        wait_for_cf_clearance(page, timeout=3)
+                        try_click_turnstile_checkbox(page)
+                        time.sleep(1)
+
+                        # CF Login Step 1: Fill email
                         email_filled = False
-                        for sel in ["input[name='email']", "input[autocomplete='email']", "input[type='email']"]:
+                        for sel in [
+                            "input[name='email']",
+                            "input[type='email']",
+                            "input[autocomplete='email']",
+                            "input[autocomplete='username']",
+                            "input[id*='email' i]",
+                            "input[placeholder*='email' i]",
+                            # First visible non-hidden, non-password input
+                            "form input:not([type='password']):not([type='hidden']):not([type='checkbox'])",
+                        ]:
                             try:
                                 el = page.locator(sel).first
-                                if el.is_visible(timeout=3000):
+                                cnt = el.count()
+                                if cnt > 0 and el.is_visible(timeout=2000):
                                     el.triple_click()
                                     el.fill(args.email)
                                     email_filled = True
                                     log_step(f"Login email filled via: {sel}")
                                     break
-                            except Exception:
+                            except Exception as ex:
+                                log_step(f"Login email try {sel}: {type(ex).__name__}")
                                 continue
 
                         if not email_filled:
-                            log_step("Email field not found — taking screenshot")
+                            log_step("Email field not found on login page")
                             page.screenshot(path="/tmp/cf_login_noemail.png")
 
-                        if email_filled:
-                            # CF Login Step 2: Click "Continue" / "Next" to proceed to password
-                            for sel in ["button:has-text('Continue')", "button:has-text('Next')",
-                                        "input[type='submit']", "button[type='submit']"]:
-                                try:
-                                    btn = page.locator(sel).first
-                                    if btn.is_visible(timeout=2000):
-                                        btn.click()
-                                        log_step(f"Login Continue clicked via: {sel}")
-                                        time.sleep(3)
-                                        break
-                                except Exception:
-                                    continue
-
-                        # CF Login Step 3: Solve Turnstile again (after Continue, CF may show new Turnstile)
-                        wait_for_cf_clearance(page, timeout=5)
-                        try_click_turnstile_checkbox(page)
-                        time.sleep(2)
-
-                        # CF Login Step 4: Fill password
+                        # CF Login Step 2: Fill password (same form as email — no Continue needed)
                         pw_filled = False
-                        for pw_sel in ["input[name='password']", "input[type='password']", "input[autocomplete='current-password']"]:
+                        for pw_sel in [
+                            "input[type='password']",
+                            "input[name='password']",
+                            "input[autocomplete='current-password']",
+                            "input[autocomplete='new-password']",
+                        ]:
                             try:
                                 pw_el = page.locator(pw_sel).first
-                                if pw_el.is_visible(timeout=4000):
+                                if pw_el.count() > 0 and pw_el.is_visible(timeout=2000):
                                     pw_el.triple_click()
                                     pw_el.fill(args.password)
                                     pw_filled = True
@@ -865,8 +879,13 @@ def main():
                                 continue
 
                         if not pw_filled:
-                            log_step("Password field not visible — taking screenshot")
+                            log_step("Password field not found")
                             page.screenshot(path="/tmp/cf_login_nopw.png")
+
+                        # Solve Turnstile (if any appeared after filling form)
+                        wait_for_cf_clearance(page, timeout=3)
+                        try_click_turnstile_checkbox(page)
+                        time.sleep(1)
 
 
                         # Check if auto-solved, else try 2Captcha
