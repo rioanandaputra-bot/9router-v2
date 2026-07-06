@@ -1641,113 +1641,65 @@ def main():
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             time.sleep(1)
 
-            # Account Resources — screenshot shows: [Include ▼][Select... ▼]
-            # CF validation: "Choose an account resource" (red) when empty
-            # The "Select..." is a custom CF dropdown (not native <select>, not React Select)
-            # Strategy: click the dropdown arrow, wait for options, click first option
-            # Also try: type in the search input if dropdown has search
+            # Account Resources — [Include ▼][Select... ▼] — REQUIRED (red error if empty)
+            # "Select..." is a React Select — click .react-select__control or .react-select__dropdown-indicator
             try:
-                # Step 1: Click the "Select..." dropdown button
-                ar_opened = False
-                for ar_sel in [
-                    # The dropdown trigger (the visible "Select..." element with ▼ arrow)
-                    "[class*='account'] [class*='select'], [class*='resources'] [class*='select']",
-                    # Playwright: button near "Account Resources" heading
-                    "section:has-text('Account Resources') button",
-                    # Any element with text "Select..." that is a button/input trigger
-                    "[aria-haspopup] >> text='Select...'",
-                    "[aria-expanded] >> text='Select...'",
-                ]:
-                    try:
-                        btn = page.locator(ar_sel).first
-                        if btn.count() > 0 and btn.is_visible(timeout=800):
-                            btn.click()
-                            time.sleep(1.5)
-                            ar_opened = True
-                            log_step(f"Account Resources dropdown opened via: {ar_sel}")
-                            break
-                    except Exception:
-                        continue
-
-                # Step 2: If no specific selector worked, find "Select..." text element via JS and click parent
-                if not ar_opened:
-                    result = page.evaluate("""
-                        () => {
-                            // Find the Account Resources section "Select..." trigger
-                            // Look for the container with the dropdown arrow
-                            const allDivs = Array.from(document.querySelectorAll('div, button, span'));
-                            for (const el of allDivs) {
-                                // Find element that contains exactly "Select..." text and has children (=dropdown trigger)
-                                if (el.textContent.trim() === 'Select...' && el.children.length === 0) {
-                                    // Walk up to find clickable parent (the dropdown trigger wrapper)
-                                    let parent = el.parentElement;
-                                    for (let i = 0; i < 4 && parent; i++) {
-                                        if (parent.tagName === 'BUTTON' || parent.getAttribute('role') === 'button' ||
-                                            parent.getAttribute('aria-haspopup') || parent.getAttribute('aria-expanded') !== null) {
-                                            parent.click();
-                                            return 'clicked parent: ' + parent.tagName + ' ' + (parent.getAttribute('role') || '');
-                                        }
-                                        parent = parent.parentElement;
-                                    }
-                                    // Fallback: click the element itself
-                                    el.click();
-                                    return 'clicked placeholder text itself';
-                                }
+                ar_opened = page.evaluate("""
+                    () => {
+                        // Find react-select__control that has "Select..." placeholder (= Account Resources)
+                        const ctrls = Array.from(document.querySelectorAll('[class*="react-select__control"]'));
+                        for (const ctrl of ctrls) {
+                            const ph = ctrl.querySelector('[class*="react-select__placeholder"]');
+                            if (ph && ph.textContent.trim() === 'Select...') {
+                                // Click the dropdown indicator (the ▼ arrow)
+                                const ind = ctrl.querySelector('[class*="react-select__dropdown-indicator"]');
+                                if (ind) { ind.click(); return 'indicator clicked'; }
+                                ctrl.click();
+                                return 'control clicked';
                             }
-                            return 'Select... not found';
+                        }
+                        return 'no Select... control found';
+                    }
+                """)
+                log_step(f"Account Resources React Select: {ar_opened}")
+
+                if "clicked" in ar_opened:
+                    time.sleep(2)  # Wait for async option load
+                    # Log available options
+                    opts_text = page.evaluate("""
+                        () => {
+                            const opts = Array.from(document.querySelectorAll('[class*="react-select__option"]'));
+                            return opts.filter(o => o.offsetParent !== null).map(o => o.textContent.trim());
                         }
                     """)
-                    log_step(f"Account Resources JS parent click: {result}")
-                    if "clicked" in result:
-                        time.sleep(1.5)
-                        ar_opened = True
+                    log_step(f"Account Resources options: {opts_text}")
 
-                # Step 3: Click the first visible option OR type to search
-                if ar_opened:
-                    # Log all visible options
-                    try:
-                        opts_visible = page.evaluate("""
-                            () => {
-                                const opts = Array.from(document.querySelectorAll("[role='option'], [class*='option'], li[class*='item']"));
-                                return opts.filter(o => {
-                                    const r = o.getBoundingClientRect();
-                                    return r.width > 0 && r.height > 0;
-                                }).map(o => o.textContent.trim()).slice(0, 10);
-                            }
-                        """)
-                        log_step(f"Account Resources visible options: {opts_visible}")
-
-                        if opts_visible:
-                            # Click first option
-                            opt = page.locator("[role='option'], [class*='option']").first
-                            if opt.count() > 0 and opt.is_visible(timeout=1000):
-                                txt = opt.text_content() or "?"
-                                opt.click()
+                    if opts_text:
+                        # Click first option
+                        first = page.locator("[class*='react-select__option']").first
+                        if first.count() > 0 and first.is_visible(timeout=1000):
+                            txt = first.text_content() or "?"
+                            first.click()
+                            time.sleep(0.5)
+                            log_step(f"Account Resources selected: {txt[:60]}")
+                    else:
+                        # No options yet — React Select may need more time or keyboard nav
+                        log_step("No options visible — trying keyboard ArrowDown")
+                        try:
+                            page.keyboard.press("ArrowDown")
+                            time.sleep(1)
+                            opts2 = page.locator("[class*='react-select__option']").all()
+                            log_step(f"Options after ArrowDown: {len(opts2)}")
+                            if opts2:
+                                txt2 = opts2[0].text_content() or "?"
+                                opts2[0].click()
                                 time.sleep(0.5)
-                                log_step(f"Account Resources option clicked: {txt[:50]}")
-                        else:
-                            # No options visible — try typing the account ID (we have it!)
-                            try:
-                                active = page.evaluate("document.activeElement ? document.activeElement.tagName + ':' + document.activeElement.type : 'none'")
-                                log_step(f"Active element after dropdown click: {active}")
-                                # Type account ID fragment to search
-                                page.keyboard.type(account_id[:8])
-                                time.sleep(1.5)
-                                opts2 = page.locator("[role='option'], [class*='option']").all()
-                                log_step(f"Options after typing account ID: {len(opts2)}")
-                                if opts2:
-                                    txt2 = opts2[0].text_content() or "?"
-                                    opts2[0].click()
-                                    time.sleep(0.5)
-                                    log_step(f"Account Resources option via search: {txt2[:50]}")
-                                else:
-                                    # Escape and leave blank - form might still work
-                                    page.keyboard.press("Escape")
-                                    log_step("Account Resources: no options found even after search")
-                            except Exception as e:
-                                log_step(f"Account Resources search: {e}")
-                    except Exception as e:
-                        log_step(f"Account Resources options: {e}")
+                                log_step(f"Account Resources ArrowDown select: {txt2[:60]}")
+                            else:
+                                page.keyboard.press("Escape")
+                                log_step("Account Resources: no options — leaving empty, will try API fallback")
+                        except Exception as e:
+                            log_step(f"Account Resources ArrowDown: {e}")
             except Exception as e:
                 log_step(f"Account Resources error: {e}")
 
@@ -1805,6 +1757,56 @@ def main():
                         continue
 
             log_step(f"Continue to summary: {continue_clicked}")
+
+            # 7a. If "Continue to summary" failed, try CF API via browser session cookies
+            # This bypasses ALL form UI issues — uses browser session (cf_clearance + cookies)
+            if not continue_clicked:
+                log_step("Continue failed — trying CF API via browser session (page.evaluate fetch)")
+                try:
+                    # The permission group IDs are hardcoded from CF's workers-ai template:
+                    # a92d2450e05d4e7bb7d0a64968f83d11 = Workers AI Read
+                    # bacc64e0f6c34fc0883a1223f938a104 = Workers AI Edit  
+                    # account_id is available from earlier login step
+                    api_result = page.evaluate(f"""
+                        async () => {{
+                            const resp = await fetch('https://api.cloudflare.com/client/v4/user/tokens', {{
+                                method: 'POST',
+                                credentials: 'include',
+                                headers: {{ 'Content-Type': 'application/json' }},
+                                body: JSON.stringify({{
+                                    name: 'Workers AI',
+                                    policies: [{{
+                                        effect: 'allow',
+                                        resources: {{
+                                            'com.cloudflare.api.account.{account_id}': '*'
+                                        }},
+                                        permission_groups: [
+                                            {{ id: 'a92d2450e05d4e7bb7d0a64968f83d11' }},
+                                            {{ id: 'bacc64e0f6c34fc0883a1223f938a104' }}
+                                        ]
+                                    }}]
+                                }})
+                            }});
+                            const data = await resp.json();
+                            return JSON.stringify({{ status: resp.status, body: data }});
+                        }}
+                    """)
+                    log_step(f"CF API token create: {str(api_result)[:300]}")
+                    import json as _json
+                    api_parsed = _json.loads(api_result)
+                    if api_parsed.get("status") == 200:
+                        result_body = api_parsed.get("body", {})
+                        if result_body.get("success") and result_body.get("result", {}).get("value"):
+                            api_token = result_body["result"]["value"]
+                            log_step(f"CF API token created: {api_token[:10]}...")
+                            output_result({"status": "ok", "email": args.email, "api_key": api_token, "account_id": account_id})
+                            sys.exit(0)
+                        else:
+                            log_step(f"CF API token create failed: {result_body.get('errors', 'unknown')}")
+                    else:
+                        log_step(f"CF API HTTP {api_parsed.get('status')} — body: {str(api_result)[:200]}")
+                except Exception as e:
+                    log_step(f"CF API fallback error: {e}")
 
             # 7. On summary page, click "Create Token"
             time.sleep(2)
