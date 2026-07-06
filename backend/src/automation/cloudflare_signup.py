@@ -1087,21 +1087,34 @@ def main():
             import requests as _req
             log_step("Mencoba ambil Global API Key dari dashboard...")
             try:
-                # Navigate to API keys page
+                # Navigate to API keys page — force reload so Global API Key section is visible
                 page.goto("https://dash.cloudflare.com/profile/api-tokens", wait_until="domcontentloaded", timeout=20000)
-                time.sleep(2)
+                time.sleep(3)
+                page.screenshot(path="/tmp/cf_gak_page.png")
+                _pg_txt = page.inner_text("body")
+                _gidx = _pg_txt.find("Global")
+                log_step(f"GAK page: {_pg_txt[_gidx:_gidx+200] if _gidx >= 0 else _pg_txt[:200]}")
+
+                # Scroll to bottom to reveal Global API Key section
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                time.sleep(1)
 
                 # Click on "Global API Key" > "View" button
+                view_clicked = False
                 for sel in ["button:has-text('View')", "a:has-text('View')"]:
                     try:
                         b = page.locator(sel).first
                         if b.count() > 0 and b.is_visible(timeout=3000):
                             b.click()
                             time.sleep(2)
-                            log_step("Clicked View Global API Key")
+                            log_step(f"Clicked View Global API Key via: {sel}")
+                            view_clicked = True
                             break
                     except Exception:
                         continue
+                if not view_clicked:
+                    _btns = page.evaluate("Array.from(document.querySelectorAll('button')).filter(b=>b.offsetParent).map(b=>b.innerText.trim()).filter(t=>t).slice(0,30)")
+                    log_step(f"View not found. Visible buttons: {_btns}")
 
                 # CF shows "Verify Your Identity" modal — click Send Verification Code → enter OTP from email
                 try:
