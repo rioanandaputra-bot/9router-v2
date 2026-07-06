@@ -803,27 +803,57 @@ def main():
                             _early_account_id = _m2.group(1)
 
                     if not _early_account_id:
-                        # Fill email
+                        # CF Login Step 1: Fill email
+                        email_filled = False
                         for sel in ["input[name='email']", "input[autocomplete='email']", "input[type='email']"]:
                             try:
                                 el = page.locator(sel).first
-                                if el.is_visible(timeout=1500):
+                                if el.is_visible(timeout=2000):
+                                    el.triple_click()
                                     el.fill(args.email)
+                                    email_filled = True
+                                    log_step(f"Login email filled via: {sel}")
                                     break
                             except Exception:
                                 continue
 
-                        # Fill password
-                        pw_el = page.locator("input[name='password'], input[type='password']").first
-                        if pw_el.is_visible(timeout=3000):
-                            pw_el.fill(args.password)
-                        time.sleep(1)
+                        if email_filled:
+                            # CF Login Step 2: Click "Continue" / "Next" to proceed to password
+                            for sel in ["button:has-text('Continue')", "button:has-text('Next')",
+                                        "input[type='submit']", "button[type='submit']"]:
+                                try:
+                                    btn = page.locator(sel).first
+                                    if btn.is_visible(timeout=2000):
+                                        btn.click()
+                                        log_step(f"Login Continue clicked via: {sel}")
+                                        time.sleep(3)
+                                        break
+                                except Exception:
+                                    continue
 
-                        # Solve Turnstile - try click approach first (same as signup)
+                        # CF Login Step 3: Solve Turnstile (appears after email step)
                         log_step("Menyelesaikan Turnstile login...")
-                        wait_for_cf_clearance(page, timeout=5)  # quick auto-solve check
-                        try_click_turnstile_checkbox(page)  # click approach
+                        wait_for_cf_clearance(page, timeout=5)
+                        try_click_turnstile_checkbox(page)
                         time.sleep(3)
+
+                        # CF Login Step 4: Fill password (appears after Turnstile or alongside email)
+                        pw_filled = False
+                        for pw_sel in ["input[name='password']", "input[type='password']", "input[autocomplete='current-password']"]:
+                            try:
+                                pw_el = page.locator(pw_sel).first
+                                if pw_el.is_visible(timeout=4000):
+                                    pw_el.triple_click()
+                                    pw_el.fill(args.password)
+                                    pw_filled = True
+                                    log_step(f"Login password filled via: {pw_sel}")
+                                    break
+                            except Exception:
+                                continue
+
+                        if not pw_filled:
+                            log_step("Password field not found after Continue — may already be on combined form")
+
 
                         # Check if auto-solved, else try 2Captcha
                         login_turnstile_solved = False
