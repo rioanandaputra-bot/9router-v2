@@ -803,12 +803,22 @@ def main():
                             _early_account_id = _m2.group(1)
 
                     if not _early_account_id:
-                        # CF Login Step 1: Fill email
+                        # Take screenshot to see login page state
+                        page.screenshot(path="/tmp/cf_login_page.png")
+
+                        # CF Login Step 0: Solve Turnstile FIRST if visible
+                        # (CF /login shows Turnstile before the email form on some flows)
+                        log_step("Menyelesaikan Turnstile login...")
+                        wait_for_cf_clearance(page, timeout=5)
+                        try_click_turnstile_checkbox(page)
+                        time.sleep(2)
+
+                        # CF Login Step 1: Fill email (after Turnstile clears)
                         email_filled = False
                         for sel in ["input[name='email']", "input[autocomplete='email']", "input[type='email']"]:
                             try:
                                 el = page.locator(sel).first
-                                if el.is_visible(timeout=2000):
+                                if el.is_visible(timeout=3000):
                                     el.triple_click()
                                     el.fill(args.email)
                                     email_filled = True
@@ -816,6 +826,10 @@ def main():
                                     break
                             except Exception:
                                 continue
+
+                        if not email_filled:
+                            log_step("Email field not found — taking screenshot")
+                            page.screenshot(path="/tmp/cf_login_noemail.png")
 
                         if email_filled:
                             # CF Login Step 2: Click "Continue" / "Next" to proceed to password
@@ -831,13 +845,12 @@ def main():
                                 except Exception:
                                     continue
 
-                        # CF Login Step 3: Solve Turnstile (appears after email step)
-                        log_step("Menyelesaikan Turnstile login...")
+                        # CF Login Step 3: Solve Turnstile again (after Continue, CF may show new Turnstile)
                         wait_for_cf_clearance(page, timeout=5)
                         try_click_turnstile_checkbox(page)
-                        time.sleep(3)
+                        time.sleep(2)
 
-                        # CF Login Step 4: Fill password (appears after Turnstile or alongside email)
+                        # CF Login Step 4: Fill password
                         pw_filled = False
                         for pw_sel in ["input[name='password']", "input[type='password']", "input[autocomplete='current-password']"]:
                             try:
@@ -852,7 +865,8 @@ def main():
                                 continue
 
                         if not pw_filled:
-                            log_step("Password field not found after Continue — may already be on combined form")
+                            log_step("Password field not visible — taking screenshot")
+                            page.screenshot(path="/tmp/cf_login_nopw.png")
 
 
                         # Check if auto-solved, else try 2Captcha
@@ -1706,22 +1720,21 @@ def main():
                 log_step(f"Account Resources React Select: {ar_opened}")
 
                 if "clicked" in ar_opened:
-                    # Wait up to 5s for async option load (new CF accounts take time)
-                    opts_text = []
-                    for _wait in range(5):
-                        time.sleep(1)
-                        opts_text = page.evaluate("""
-                            () => {
-                                const opts = Array.from(document.querySelectorAll('[class*="react-select__option"]'));
-                                return opts.filter(o => o.offsetParent !== null).map(o => o.textContent.trim());
-                            }
-                        """)
-                        if opts_text:
-                            break
-                    log_step(f"Account Resources options (after wait): {opts_text}")
+                    time.sleep(1)
+                    # Type "all" to search for "All accounts" option
+                    # (React Select is search-driven; typing triggers option load)
+                    page.keyboard.type("all", delay=80)
+                    time.sleep(2)
+
+                    opts_text = page.evaluate("""
+                        () => {
+                            const opts = Array.from(document.querySelectorAll('[class*="react-select__option"]'));
+                            return opts.filter(o => o.offsetParent !== null).map(o => o.textContent.trim());
+                        }
+                    """)
+                    log_step(f"Account Resources options after 'all' search: {opts_text}")
 
                     if opts_text:
-                        # Click first option
                         first = page.locator("[class*='react-select__option']").first
                         if first.count() > 0 and first.is_visible(timeout=1000):
                             txt = first.text_content() or "?"
@@ -1729,29 +1742,28 @@ def main():
                             time.sleep(0.5)
                             log_step(f"Account Resources selected: {txt[:60]}")
                     else:
-                        # No options — CF new account dropdown empty
-                        # Strategy: inject account_id directly into React Select hidden input
-                        page.keyboard.press("Escape")
-                        inject_result = page.evaluate(f"""
-                            () => {{
-                                // React Select stores hidden inputs for form submission
-                                // Account Resources likely has input with name containing 'account' or 'resource'
-                                // Try to set the React Select value by manipulating its internal state
-                                const allInputs = Array.from(document.querySelectorAll('input[type="hidden"]'));
-                                for (const inp of allInputs) {{
-                                    const n = inp.name || '';
-                                    if (n.toLowerCase().includes('account') || n.toLowerCase().includes('resource')) {{
-                                        inp.value = '{account_id}';
-                                        inp.dispatchEvent(new Event('change', {{bubbles: true}}));
-                                        return 'injected account_id into: ' + n;
-                                    }}
-                                }}
-                                // Fallback: log all hidden inputs to understand the form structure
-                                const hidden = allInputs.map(i => i.name + '=' + i.value.substring(0,20));
-                                return 'no account input found. hidden inputs: ' + hidden.slice(0,10).join(', ');
-                            }}
+                        # Try clearing and typing account_id instead
+                        page.keyboard.press("Control+a")
+                        page.keyboard.press("Delete")
+                        page.keyboard.type(account_id[:8], delay=80)
+                        time.sleep(2)
+                        opts2 = page.evaluate("""
+                            () => {
+                                const opts = Array.from(document.querySelectorAll('[class*="react-select__option"]'));
+                                return opts.filter(o => o.offsetParent !== null).map(o => o.textContent.trim());
+                            }
                         """)
-                        log_step(f"Account Resources inject: {inject_result}")
+                        log_step(f"Account Resources options after account_id search: {opts2}")
+                        if opts2:
+                            first2 = page.locator("[class*='react-select__option']").first
+                            if first2.count() > 0 and first2.is_visible(timeout=1000):
+                                txt2 = first2.text_content() or "?"
+                                first2.click()
+                                time.sleep(0.5)
+                                log_step(f"Account Resources selected via account_id: {txt2[:60]}")
+                        else:
+                            page.keyboard.press("Escape")
+                            log_step(f"Account Resources: no options for 'all' or account_id — leaving empty")
             except Exception as e:
                 log_step(f"Account Resources error: {e}")
 
