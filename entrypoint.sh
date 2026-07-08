@@ -24,8 +24,8 @@ ls -la /app/node_modules/open-sse
 ls -la /app/node_modules/@/lib
 
 # 3. Jalankan backend Express di background
-echo "Starting Node.js Backend Server on port 3001..."
-export PORT=3001
+echo "Starting Node.js Backend Server on port 20128..."
+export PORT=20128
 export DATA_DIR=/data
 export NODE_ENV=production
 cd /app

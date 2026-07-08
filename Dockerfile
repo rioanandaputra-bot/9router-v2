@@ -77,7 +77,7 @@ COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
 # Environment variables
-ENV PORT=3001
+ENV PORT=20128
 ENV DATA_DIR=/data
 ENV NODE_ENV=production
 
