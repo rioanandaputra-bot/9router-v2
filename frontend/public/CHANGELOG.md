@@ -4,6 +4,17 @@ All notable changes to the decoupled **9Router v2** platform will be documented 
 
 ---
 
+## [v0.7.0] - 2026-07-08
+
+### Added
+- **Docker Deployment Configuration**: Added fully optimized multi-stage `Dockerfile`, `nginx.docker.conf`, and `entrypoint.sh` for seamless single-container deployment on Dokploy PaaS, containing:
+  - React frontend built statically and served by Nginx on port 80.
+  - Node.js Express backend proxying API, v1, and v1beta routes.
+  - Persistent SQLite database mapping to `/data` volume.
+  - Pre-installed Python 3 virtual environment and Camoufox stealth browser for account automation.
+
+---
+
 ## [v0.6.0] - 2026-07-06
 
 ### Added
