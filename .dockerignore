@@ -1,0 +1,11 @@
+node_modules
+**/dist
+**/.venv
+**/.env
+**/*.sqlite
+.git
+.agents
+.gemini
+docs
+README.md
+LICENSE
